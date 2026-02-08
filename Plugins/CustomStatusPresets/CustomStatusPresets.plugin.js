@@ -2,7 +2,7 @@
  * @name CustomStatusPresets
  * @author DevilBro
  * @authorId 278543574059057154
- * @version 1.3.5
+ * @version 1.3.6
  * @description Allows you to save Custom Statuses as Quick Select and select them by right-clicking the Status Bubble
  * @invite Jx3TjNS
  * @donate https://www.paypal.me/MircoWittrien
@@ -266,7 +266,7 @@ module.exports = (_ => {
 					${BDFDB.dotCN.animationcontainerscale + BDFDB.dotCN.animationcontainerrender} {
 						transform: unset !important;
 					}
-					${BDFDB.dotCN.menu} #account-edit-custom-status ${BDFDB.dotCN.menuhintcontainer} {
+					${BDFDB.dotCN.menu} #account-edit-custom-status ${BDFDB.dotCN.menuiconcontainer} {
 						margin-right: 8px;
 						margin-left: 0;
 						order: -1;
@@ -398,7 +398,7 @@ module.exports = (_ => {
 										})
 									]
 								}),
-								hint: !clearAfter || clearAfter == ClearAfterValues.DONT_CLEAR ? BDFDB.LanguageUtils.LanguageStrings.NEVER : clearAfter == ClearAfterValues.TODAY ? BDFDB.LanguageUtils.LanguageStrings.TODAY : BDFDB.LanguageUtils.LanguageStringsFormat("AFTER_PLACEHOLDER", `${clearAfter/3600000}h`),
+								icon: !clearAfter || clearAfter == ClearAfterValues.DONT_CLEAR ? BDFDB.LanguageUtils.LanguageStrings.NEVER : clearAfter == ClearAfterValues.TODAY ? BDFDB.LanguageUtils.LanguageStrings.TODAY : BDFDB.LanguageUtils.LanguageStringsFormat("AFTER_PLACEHOLDER", `${clearAfter/3600000}h`),
 								action: _ => {
 									if (!presets[id]) return;
 									let expiresAt = clearAfter && clearAfter != ClearAfterValues.DONT_CLEAR ? clearAfter : null;
