@@ -103,13 +103,6 @@ module.exports = (_ => {
 					]
 				};
 				
-				this.css = `
-					${BDFDB.dotCN.menu} [id^="message-"] ${BDFDB.dotCN.menuiconcontainer} {
-						width: unset;
-						max-width: 70px;
-					}
-				`;
-				
 				for (let type in this.defaults.bindings) {
 					let nativeAction = type.indexOf("__") != 0;
 					this.defaults.bindingsState[type] = {value: nativeAction};
@@ -277,9 +270,11 @@ module.exports = (_ => {
 								}
 								if (action) hint = this.getActiveShortcutString(action);
 							}
-							if (hint) item.props.icon = (...args) => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.TextScroller, {
-								children: hint
-							});
+							if (hint) item.props.icon = _ => {
+								return BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuHint, {
+									hint: hint
+								});
+							};
 						}
 					}
 				}
