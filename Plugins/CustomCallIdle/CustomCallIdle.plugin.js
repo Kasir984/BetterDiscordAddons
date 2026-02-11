@@ -1,182 +1,252 @@
 /**
  * @name CustomCallIdle
  * @author Mom's Spaggeti
- * @authorId 768501659130658846
- * @description Customize what happens when DM call idle triggers (Extend, Mute, Deafen, Mute+Deafen, Disconnect, Disable) with a test button
- * @version 1.1.0
+ * @description Describe the basic information. Maybe a support server link.
+ * @version 1.0
+ * @authorId 51512151151651
+ * @website https://www.youtube.com/watch?v=dQw4w9WgXcQ&pp=ygUXbmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXDSBwkJhwoBhyohjO8%3D
+ * @source https://github.com/Kasir984/CustomCallIdle
  */
 
+class SettingsMgr {
+  constructor() {
+    this.settings = {
+      enabled: false,
+      mode: "disconnect", // extend, mute, deafen, both, disconnect, disable
+      timeoutMinutes: 3, // Default to 3 minutes, same as Discord's default idle timeout
+    };
+    this.loadSettings();
+  }
+
+  saveSettings() {
+    BdApi.Data.save("CustomCallIdle", "settings", this.settings);
+  }
+
+  loadSettings() {
+    const saved = BdApi.Data.load("CustomCallIdle", "settings");
+    if (saved) {
+      this.settings = Object.assign(this.settings, saved);
+    }
+  }
+}
+
 module.exports = class CustomCallIdle {
-    getName() { return "CustomCallIdle"; }
-    getAuthor() { return ".spagget"; }
-    getDescription() { return "Customize what happens when DM call idle triggers"; }
-    getVersion() { return "1.1.0"; }
+  getName() {
+    return "Custom Call Idle Actions";
+  }
+  getDescription() {
+    return "Customize what happens when you go idle in a voice call.";
+  }
+  getVersion() {
+    return "1.0";
+  }
+  getAuthor() {
+    return "Mom's Spaggeti";
+  }
 
-    constructor() {
-        this.settings = {
-            mode: "extend",
-            timeoutMinutes: 30
+  constructor() {
+    this.settingsMgr = new SettingsMgr();
+    this.voiceActions = null;
+  }
+
+  start() {
+    if (this.settingsMgr.settings.enabled) {
+      console.log("[CustomCallIdle] Plugin is enabled. Starting...");
+      try {
+        // Get VoiceActions module
+        this.voiceActions = BdApi.Webpack.getModule(
+          (m) => m?.toggleSelfMute && m?.toggleSelfDeaf,
+        );
+        if (!this.voiceActions) {
+          console.error("[CustomCallIdle] Failed to find VoiceActions module");
+        }
+
+        // Patch the handleIdleUpdate function
+        const ChannelCallModule = BdApi.Webpack.getModule(
+          (m) => m?.handleIdleUpdate,
+        );
+        if (!ChannelCallModule || !ChannelCallModule.handleIdleUpdate) {
+          console.error("[CustomCallIdle] Failed to find ChannelCallModule");
+          return;
+        }
+
+        this.original = ChannelCallModule.handleIdleUpdate;
+        const self = this;
+        ChannelCallModule.handleIdleUpdate = function (...args) {
+          self.handleCustomIdle(this);
+          return self.original.apply(this, args);
         };
-        this.loadSettings();
+
+        console.log("[CustomCallIdle] Patched handleIdleUpdate successfully");
+      } catch (e) {
+        console.error("[CustomCallIdle] Error in start():", e);
+      }
+    } else {
+      console.log("[CustomCallIdle] Plugin is disabled. Not patching.");
+    }
+  }
+
+  stop() {
+    try {
+      // Restore original function
+      const ChannelCallModule = BdApi.Webpack.getModule(
+        (m) => m?.handleIdleUpdate,
+      );
+      if (ChannelCallModule && this.original) {
+        ChannelCallModule.handleIdleUpdate = this.original;
+      }
+      console.log("[CustomCallIdle] Restored original handleIdleUpdate");
+    } catch (e) {
+      console.error("[CustomCallIdle] Error in stop():", e);
+    }
+  }
+
+  handleCustomIdle(context) {
+    const mode = this.settingsMgr.settings.mode;
+    const timeout = this.settingsMgr.settings.timeoutMinutes * 60 * 1000; // Convert minutes to milliseconds
+
+    console.log(
+      `[CustomCallIdle] Handling idle with mode: ${mode} and timeout: ${timeout}ms`,
+    );
+
+    if (!this.voiceActions) {
+      console.error("[CustomCallIdle] VoiceActions module not available");
+      return;
     }
 
-    loadSettings() {
-        const saved = BdApi.Data.load("CustomCallIdle", "settings");
-        if (saved) {
-            this.settings = { ...this.settings, ...saved };
+    switch (mode) {
+      case "extend":
+        // Extend the idle timeout by resetting it with the new timeout value
+        if (context.idleTimeout) {
+          context.idleTimeout.start(timeout);
         }
-    }
-
-    saveSettings() {
-        BdApi.Data.save("CustomCallIdle", "settings", this.settings);
-    }
-
-    load() {}
-
-    start() {
-        console.log("[CustomCallIdle] Starting plugin...");
-        try {
-            // Patch the handleIdleUpdate function
-            const ChannelCallModule = BdApi.Webpack.getModule((m) => m?.handleIdleUpdate);
-            if (!ChannelCallModule || !ChannelCallModule.handleIdleUpdate) {
-                console.error("[CustomCallIdle] Failed to find ChannelCallModule");
-                return;
-            }
-
-            this.original = ChannelCallModule.handleIdleUpdate;
-            const self = this;
-
-            ChannelCallModule.handleIdleUpdate = function (...args) {
-                self.handleCustomIdle(this);
-                return self.original.apply(this, args);
-            };
-
-            console.log("[CustomCallIdle] Patched handleIdleUpdate successfully");
-
-        } catch (e) {
-            console.error("[CustomCallIdle] Error in start():", e);
+        break;
+      case "mute":
+        // Mute the user
+        this.voiceActions.toggleSelfMute();
+        break;
+      case "deafen":
+        // Deafen the user
+        this.voiceActions.toggleSelfDeaf();
+        break;
+      case "both":
+        // Mute and deafen the user
+        this.voiceActions.toggleSelfMute();
+        this.voiceActions.toggleSelfDeaf();
+        break;
+      case "disconnect":
+        // Disconnect the user from the call
+        if (this.voiceActions.leaveCall) {
+          this.voiceActions.leaveCall();
         }
+        break;
+      case "disable":
+        // Do nothing, effectively disabling idle actions
+        break;
+      default:
+        console.warn(`[CustomCallIdle] Unknown mode: ${mode}`);
     }
+  }
 
-    stop() {
-        try {
-            // Restore original function
-            const ChannelCallModule = BdApi.Webpack.getModule((m) => m?.handleIdleUpdate);
-            if (ChannelCallModule && this.original) {
-                ChannelCallModule.handleIdleUpdate = this.original;
-                console.log("[CustomCallIdle] Restored original handleIdleUpdate");
-            }
+  getSettingsPanel() {
+    // Use Discord's dark theme colors
+    let bgColor = "#2f3136"; // Discord's dark background color
+    let inputBgColor = "#202225"; // Darker background for inputs
 
-        } catch (e) {
-            console.error("[CustomCallIdle] Error in stop():", e);
+    try {
+      // Try to get background color from Discord's theme elements
+      const darkBg =
+        document.querySelector('[class*="theme-dark"]') ||
+        document.querySelector('[class*="contentRegion"]');
+      if (darkBg) {
+        const computedBg = window.getComputedStyle(darkBg).backgroundColor;
+        if (computedBg && computedBg !== "rgba(0, 0, 0, 0)") {
+          bgColor = computedBg;
         }
+      }
+    } catch (e) {
+      console.warn("[CustomCallIdle] Could not get background color:", e);
     }
 
+    // Create the settings panel
+    const panel = document.createElement("div");
+    panel.style.padding = "10px";
+    panel.style.backgroundColor = bgColor;
+    panel.style.borderRadius = "8px";
 
-    getSettingsPanel() {
-        // Get the actual computed background color from Discord's theme
-        const bodyBg = window.getComputedStyle(document.querySelector("body")).backgroundColor;
-        const bgColor = bodyBg || "#36393f"; // Fallback to Discord's dark default
-        
-        const panel = document.createElement("div");
-        panel.style.padding = "15px";
-        panel.style.backgroundColor = bgColor;
-        panel.style.borderRadius = "5px";
-        
-        // Mode selector
-        const modeLabel = document.createElement("label");
-        modeLabel.textContent = "Idle Action Mode: ";
-        modeLabel.style.display = "block";
-        modeLabel.style.color = "#fff";
-        modeLabel.style.marginBottom = "10px";
-        modeLabel.style.fontWeight = "bold";
-        
-        const modeSelect = document.createElement("select");
-        modeSelect.style.marginLeft = "10px";
-        modeSelect.style.padding = "5px";
-        modeSelect.style.backgroundColor = "#202225";
-        modeSelect.style.color = "#fff";
-        modeSelect.style.border = "1px solid #40444b";
-        modeSelect.style.borderRadius = "3px";
-        const modes = ["extend", "mute", "deafen", "both", "disconnect", "disable"];
-        modes.forEach(mode => {
-            const option = document.createElement("option");
-            option.value = mode;
-            option.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-            option.selected = this.settings.mode === mode;
-            modeSelect.appendChild(option);
-        });
-        modeSelect.addEventListener("change", (e) => {
-            this.settings.mode = e.target.value;
-            this.saveSettings();
-        });
-        modeLabel.appendChild(modeSelect);
-        
-        // Timeout input
-        const timeoutLabel = document.createElement("label");
-        timeoutLabel.textContent = "Timeout (minutes): ";
-        timeoutLabel.style.display = "block";
-        timeoutLabel.style.color = "#fff";
-        timeoutLabel.style.marginTop = "15px";
-        timeoutLabel.style.fontWeight = "bold";
-        
-        const timeoutInput = document.createElement("input");
-        timeoutInput.type = "number";
-        timeoutInput.value = this.settings.timeoutMinutes;
-        timeoutInput.style.marginLeft = "10px";
-        timeoutInput.style.padding = "5px";
-        timeoutInput.style.width = "80px";
-        timeoutInput.style.backgroundColor = "#202225";
-        timeoutInput.style.color = "#fff";
-        timeoutInput.style.border = "1px solid #40444b";
-        timeoutInput.style.borderRadius = "3px";
-        timeoutInput.addEventListener("change", (e) => {
-            this.settings.timeoutMinutes = parseInt(e.target.value) || 30;
-            this.saveSettings();
-        });
-        timeoutLabel.appendChild(timeoutInput);
-        
-        panel.appendChild(modeLabel);
-        panel.appendChild(timeoutLabel);
-        
-        return panel;
-    }
+    // Mode Select
+    const modeLabel = document.createElement("label");
+    modeLabel.textContent = "Select Idle Action: ";
+    modeLabel.style.display = "block";
+    modeLabel.style.color = "#fff";
+    modeLabel.style.marginBottom = "10px";
+    modeLabel.style.fontSize = "14px";
+    modeLabel.style.fontWeight = "bold";
 
-    handleCustomIdle(ctx) {
-        const { mode, timeoutMinutes } = this.settings;
-        
-        // Get VoiceActions on demand
-        const VoiceActions = BdApi.Webpack.getByKeys("toggleSelfMute") || 
-                            BdApi.Webpack.getByKeys("setSelfMute");
-        
-        if (!VoiceActions) {
-            console.error("[CustomCallIdle] VoiceActions module not loaded");
-            return;
-        }
+    // Timeout Input
+    const timeoutLabel = document.createElement("label");
+    timeoutLabel.textContent = "Idle Timeout (minutes): ";
+    timeoutLabel.style.display = "block";
+    timeoutLabel.style.color = "#fff";
+    timeoutLabel.style.marginBottom = "15px";
+    timeoutLabel.style.fontSize = "14px";
+    timeoutLabel.style.fontWeight = "bold";
 
-        switch (mode) {
-            case "extend":
-                const ms = timeoutMinutes * 60 * 1000;
-                if (ctx.idleTimeout && ctx.idleTimeout.start) ctx.idleTimeout.start(ms);
-                break;
+    const timeoutInput = document.createElement("input");
+    timeoutInput.type = "number";
+    timeoutInput.value = this.settingsMgr.settings.timeoutMinutes;
+    timeoutInput.style.marginLeft = "10px";
+    timeoutInput.style.padding = "5px";
+    timeoutInput.style.width = "80px";
+    timeoutInput.style.backgroundColor = inputBgColor;
+    timeoutInput.style.color = "#dcddde";
+    timeoutInput.style.border = "1px solid #202225";
+    timeoutInput.style.borderRadius = "3px";
+    timeoutInput.addEventListener("change", (e) => {
+      this.settingsMgr.settings.timeoutMinutes = parseInt(e.target.value) || 3;
+      this.settingsMgr.saveSettings();
+    });
+    timeoutLabel.appendChild(timeoutInput);
 
-            case "mute":
-                if (VoiceActions.toggleSelfMute) VoiceActions.toggleSelfMute();
-                break;
-            case "deafen":
-                if (VoiceActions.toggleSelfDeaf) VoiceActions.toggleSelfDeaf();
-                break;
-            case "both":
-                if (VoiceActions.toggleSelfMute) VoiceActions.toggleSelfMute();
-                if (VoiceActions.toggleSelfDeaf) VoiceActions.toggleSelfDeaf();
-                break;
-            case "disconnect":
-                if (VoiceActions.disconnect) VoiceActions.disconnect();
-                break;
-            case "disable":
-                // Do nothing
-                break;
-        }
-    }
+    // Create the select element for modes
+    const modeSelect = document.createElement("select");
+    modeSelect.textContent = "Select Mode";
+    modeSelect.style.display = "block";
+    modeSelect.style.color = "#dcddde";
+    modeSelect.style.backgroundColor = inputBgColor;
+    modeSelect.style.border = "1px solid #202225";
+    modeSelect.style.borderRadius = "3px";
+    modeSelect.style.padding = "5px";
+    modeSelect.style.marginBottom = "10px";
+    modeSelect.style.fontWeight = "bold";
+    const modes = [
+      { value: "extend", label: "Extend Idle Time" },
+      { value: "mute", label: "Mute User" },
+      { value: "deafen", label: "Deafen User" },
+      { value: "both", label: "Mute + Deafen User" },
+      { value: "disconnect", label: "Disconnect User" },
+      { value: "disable", label: "Disable Idle Actions (No Disconnect)" },
+    ];
+    modes.forEach((mode) => {
+      const option = document.createElement("option");
+      option.value = mode.value;
+      option.textContent = mode.label;
+      option.style.backgroundColor = inputBgColor;
+      option.style.color = "#dcddde";
+      if (this.settingsMgr.settings.mode === mode.value) {
+        option.selected = true;
+      }
+      modeSelect.appendChild(option);
+    });
+    modeSelect.addEventListener("change", (e) => {
+      this.settingsMgr.settings.mode = e.target.value;
+      this.settingsMgr.saveSettings();
+    });
 
+    panel.appendChild(timeoutLabel);
+    panel.appendChild(modeLabel);
+    panel.appendChild(modeSelect);
+
+    return panel;
+  }
 };
